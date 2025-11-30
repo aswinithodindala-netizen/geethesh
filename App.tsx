@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { ViewState } from './types';
 import FeatureCard from './components/FeatureCard';
 import ChatModule from './components/ChatModule';
 import ImageGenModule from './components/ImageGenModule';
 import LiveAssistant from './components/LiveAssistant';
-import MusicModule from './components/MusicModule';
 import LoginScreen from './components/LoginScreen';
+import ShareModal from './components/ShareModal';
 import { 
   BookOpen, 
   TrendingUp, 
@@ -14,26 +15,51 @@ import {
   Mic, 
   Home, 
   Menu,
-  Music,
-  LogOut
+  LogOut,
+  Globe,
+  Download,
+  X,
+  Share2,
+  CheckCircle,
+  Zap
 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [view, setView] = useState<ViewState>(ViewState.DASHBOARD);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  
+  useEffect(() => {
+    // PWA Install prompt
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
 
-  // If not authenticated, show Login Screen
-  if (!isAuthenticated) {
-    return <LoginScreen onLogin={() => setIsAuthenticated(true)} />;
-  }
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) {
+        setShowInstallModal(true);
+        return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
+  };
 
   const navItems = [
-    { id: ViewState.DASHBOARD, label: 'Dashboard', icon: Home },
+    { id: ViewState.DASHBOARD, label: 'Home', icon: Home },
+    { id: ViewState.KNOWLEDGE, label: 'Knowledge Base', icon: Globe },
     { id: ViewState.EDUCATION, label: 'Education Hub', icon: BookOpen },
     { id: ViewState.FINANCE, label: 'Financial Advisor', icon: TrendingUp },
     { id: ViewState.THUMBNAIL, label: 'Thumbnail Creator', icon: ImageIcon },
-    { id: ViewState.MUSIC, label: 'Song Player', icon: Music },
     { id: ViewState.WRITER, label: 'Writer & PDF Tool', icon: FileEdit },
     { id: ViewState.VOICE_ASSISTANT, label: 'Live Assistant', icon: Mic },
   ];
@@ -46,106 +72,107 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (view) {
       case ViewState.EDUCATION:
-        return <ChatModule mode="EDUCATION" title="Education Tutor" systemInstruction="You are an expert tutor. Explain concepts clearly, ask probing questions to check understanding, and adapt to the student's level. You can read images of homework problems." />;
+        return <ChatModule mode="EDUCATION" title="Education Hub" systemInstruction="You are an expert tutor specializing in all academic subjects. Provide clear, concise, and educational explanations suitable for students. Use formatting to make learning easier." />;
       case ViewState.FINANCE:
-        return <ChatModule mode="FINANCE" title="Financial Advisor" systemInstruction="You are a financial advisor. Analyze data provided by the user. When appropriate, output JSON data for charts in the format { title: string, data: [{name: string, value: number}], summary: string }. Always maintain a professional yet accessible tone." />;
+        return <ChatModule mode="FINANCE" title="Financial Advisor" systemInstruction="You are a professional financial advisor. Provide sound financial advice, budgeting tips, and market analysis. Always output data for charts in JSON format when relevant, following the schema: { title: string, data: [{ name: string, value: number }], summary: string }." />;
       case ViewState.WRITER:
-        return <ChatModule mode="WRITER" title="Content Writer & PDF Converter" systemInstruction="You are a professional content writer and document analyst. The user may upload images or PDFs (as text/images). Your task is to extract content, summarize, convert formats (e.g. PDF to Blog, Text to HTML), or write new creative content based on prompts. Be precise." />;
+        return <ChatModule mode="WRITER" title="Content Writer & PDF Tool" systemInstruction="You are a professional content writer and editor. Help users write articles, emails, stories, and correct grammar. You can also analyze uploaded text or PDF content if provided." />;
+      case ViewState.KNOWLEDGE:
+        return <ChatModule mode="KNOWLEDGE" title="Knowledge Base" systemInstruction="You are a knowledgeable assistant with access to a vast database of facts and information. Answer questions accurately and provide sources where possible." />;
       case ViewState.THUMBNAIL:
         return <ImageGenModule />;
-      case ViewState.MUSIC:
-        return <MusicModule />;
       case ViewState.VOICE_ASSISTANT:
-        return (
-          <div className="flex flex-col items-center justify-center h-full text-center p-8">
-             <div className="p-6 bg-indigo-500/20 rounded-full mb-6 animate-pulse">
-                <Mic className="w-16 h-16 text-indigo-400" />
-             </div>
-             <h2 className="text-2xl font-bold text-white mb-2">Live Voice Assistant</h2>
-             <p className="text-slate-400 max-w-md mb-8">Experience real-time, low-latency voice interaction with Gemini. Click the button below to start.</p>
-             <button 
-                onClick={() => setView(ViewState.DASHBOARD)} 
-                className="text-slate-500 hover:text-white underline"
-             >
-                Return to Dashboard
-             </button>
-          </div>
-        );
+        return <LiveAssistant onClose={() => setView(ViewState.DASHBOARD)} />;
       case ViewState.DASHBOARD:
       default:
         return (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
-            <FeatureCard 
-              title="Education Hub" 
-              description="Get help with homework, learn new topics, and analyze study materials."
-              icon={BookOpen} 
-              color="from-blue-500 to-cyan-500"
-              onClick={() => setView(ViewState.EDUCATION)}
-            />
-            <FeatureCard 
-              title="Financial Advisor" 
-              description="Analyze trends, visualize portfolio data, and get smart financial insights."
-              icon={TrendingUp} 
-              color="from-emerald-500 to-green-500"
-              onClick={() => setView(ViewState.FINANCE)}
-            />
-            <FeatureCard 
-              title="Thumbnail Creator" 
-              description="Generate stunning 16:9 thumbnails and visuals from text prompts."
-              icon={ImageIcon} 
-              color="from-pink-500 to-rose-500"
-              onClick={() => setView(ViewState.THUMBNAIL)}
-            />
-             <FeatureCard 
-              title="Song Player" 
-              description="Generate and play AI-composed music, sound effects, and melodies."
-              icon={Music} 
-              color="from-fuchsia-500 to-pink-500"
-              onClick={() => setView(ViewState.MUSIC)}
-            />
-            <FeatureCard 
-              title="Writer & PDF Converter" 
-              description="Summarize documents, convert PDFs, and write professional blogs."
-              icon={FileEdit} 
-              color="from-purple-500 to-violet-500"
-              onClick={() => setView(ViewState.WRITER)}
-            />
-            <FeatureCard 
-              title="Live Assistant" 
-              description="Talk to Gemini in real-time with voice and video support."
-              icon={Mic} 
-              color="from-orange-500 to-amber-500"
-              onClick={() => setView(ViewState.VOICE_ASSISTANT)}
-            />
+          <div className="p-6 h-full overflow-y-auto">
+             <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+               <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
+               <p className="text-slate-400">Explore your personal AI tools below.</p>
+             </div>
+             
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
+                <FeatureCard 
+                  title="Knowledge Base" 
+                  description="Ask anything and get accurate, fact-based answers instantly." 
+                  icon={Globe} 
+                  onClick={() => setView(ViewState.KNOWLEDGE)}
+                  color="from-teal-500 to-emerald-600"
+                />
+                <FeatureCard 
+                  title="Education Hub" 
+                  description="Get help with homework, learn new concepts, and master any subject." 
+                  icon={BookOpen} 
+                  onClick={() => setView(ViewState.EDUCATION)}
+                  color="from-blue-500 to-indigo-600"
+                />
+                <FeatureCard 
+                  title="Financial Advisor" 
+                  description="Plan your budget, analyze investments, and get financial insights." 
+                  icon={TrendingUp} 
+                  onClick={() => setView(ViewState.FINANCE)}
+                  color="from-green-500 to-emerald-600"
+                />
+                <FeatureCard 
+                  title="Thumbnail Creator" 
+                  description="Generate stunning 3D thumbnails and artwork for your content." 
+                  icon={ImageIcon} 
+                  onClick={() => setView(ViewState.THUMBNAIL)}
+                  color="from-pink-500 to-rose-600"
+                />
+                <FeatureCard 
+                  title="Writer & PDF Tool" 
+                  description="Generate blogs, stories, emails, and summarize PDF documents." 
+                  icon={FileEdit} 
+                  onClick={() => setView(ViewState.WRITER)}
+                  color="from-purple-500 to-violet-600"
+                />
+                <FeatureCard 
+                  title="Live Assistant" 
+                  description="Have real-time voice and video conversations with AI." 
+                  icon={Mic} 
+                  onClick={() => setView(ViewState.VOICE_ASSISTANT)}
+                  color="from-orange-500 to-red-600"
+                />
+             </div>
           </div>
         );
     }
   };
 
+  if (!isAuthenticated) {
+    return <LoginScreen 
+            onLogin={() => setIsAuthenticated(true)} 
+            onInstall={handleInstallClick}
+            onShare={() => setShowShareModal(true)}
+           />;
+  }
+
   return (
-    <div className="min-h-screen flex bg-slate-950 text-slate-100 overflow-hidden">
+    <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans selection:bg-indigo-500/30">
       
-      {/* Mobile Nav Toggle */}
-      <button 
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-slate-800 rounded-lg text-white"
-        onClick={() => setSidebarOpen(!isSidebarOpen)}
-      >
-        <Menu className="w-6 h-6" />
-      </button>
+      {/* Sidebar Overlay for Mobile */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
       {/* Sidebar */}
       <aside className={`
-        fixed lg:static inset-y-0 left-0 z-40 w-64 bg-slate-900 border-r border-slate-800 transform transition-transform duration-300
+        fixed lg:static inset-y-0 left-0 z-50 w-72 bg-slate-900 border-r border-slate-800 transform transition-transform duration-300 ease-out flex flex-col
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-        <div className="p-6">
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
-            GEETHESH'S AI
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">Your Intelligence Hub</p>
+        <div className="p-6 border-b border-slate-800 flex items-center gap-3">
+           <img src="https://cdn-icons-png.flaticon.com/512/12222/12222560.png" alt="Logo" className="w-10 h-10" />
+           <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+             GEETHESH'S AI
+           </h1>
         </div>
 
-        <nav className="px-4 space-y-2 mt-4">
+        <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-1">
           {navItems.map((item) => (
             <button
               key={item.id}
@@ -153,60 +180,124 @@ const App: React.FC = () => {
                 setView(item.id);
                 setSidebarOpen(false);
               }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
                 view === item.id 
-                  ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30' 
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
                   : 'text-slate-400 hover:bg-slate-800 hover:text-white'
               }`}
             >
-              <item.icon className="w-5 h-5" />
+              <item.icon className={`w-5 h-5 ${view === item.id ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} />
               <span className="font-medium">{item.label}</span>
             </button>
           ))}
         </nav>
 
-        <div className="absolute bottom-6 left-0 w-full px-6">
-            <button 
-                onClick={handleLogout}
-                className="w-full flex items-center justify-center gap-2 p-3 bg-slate-800/50 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 rounded-xl border border-slate-700 text-slate-400 transition-all text-sm mb-3 group"
-            >
-                <LogOut className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                <span>Sign Out</span>
-            </button>
-            <div className="p-2 text-center">
-                <p className="text-[10px] text-slate-600 tracking-widest uppercase font-semibold">Geethesh 1.0</p>
-            </div>
+        <div className="p-4 border-t border-slate-800 space-y-2">
+           {/* Full Access Badge */}
+           <div className="p-3 bg-gradient-to-r from-indigo-900/50 to-purple-900/50 rounded-xl border border-indigo-500/30 mb-2">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="p-1 bg-indigo-500 rounded-lg">
+                   <Zap className="w-3 h-3 text-white" />
+                </div>
+                <span className="text-sm font-bold text-white">Full Access Active</span>
+              </div>
+              <p className="text-[10px] text-indigo-200 ml-7">
+                 All features unlocked
+              </p>
+           </div>
+
+           <button 
+             onClick={() => setShowShareModal(true)}
+             className="w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white rounded-xl transition-colors"
+           >
+             <Share2 className="w-5 h-5" />
+             <span className="font-medium">Share App</span>
+           </button>
+           
+           <button 
+            onClick={handleInstallClick}
+            className="w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-green-400 rounded-xl transition-colors"
+           >
+            <Download className="w-5 h-5" />
+            <span className="font-medium">Get Android App</span>
+           </button>
+
+           <button 
+             onClick={handleLogout}
+             className="w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-red-900/20 hover:text-red-400 rounded-xl transition-colors"
+           >
+             <LogOut className="w-5 h-5" />
+             <span className="font-medium">Sign Out</span>
+           </button>
+           <div className="pt-2 text-center">
+             <p className="text-[10px] text-slate-600 font-mono">GEETHESH 1.0</p>
+           </div>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
-        <header className="h-16 border-b border-slate-800 bg-slate-950/50 backdrop-blur-sm flex items-center justify-between px-8 lg:px-12">
-            <h2 className="text-lg font-medium text-white ml-8 lg:ml-0">
-                {navItems.find(n => n.id === view)?.label}
-            </h2>
-            <div className="flex items-center gap-4">
-               <div className="flex flex-col items-end mr-2">
-                 <span className="text-xs font-bold text-slate-300">Admin User</span>
-                 <span className="text-[10px] text-green-400 flex items-center gap-1">
-                   <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
-                   Online
-                 </span>
-               </div>
-               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs font-bold shadow-lg shadow-indigo-500/20">
-                 GA
-               </div>
-            </div>
+      <main className="flex-1 flex flex-col h-full relative w-full lg:w-auto overflow-hidden">
+        {/* Mobile Header */}
+        <header className="lg:hidden h-16 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 z-30 flex-shrink-0">
+          <div className="flex items-center gap-3">
+             <button onClick={() => setSidebarOpen(true)} className="p-2 text-slate-400">
+               <Menu className="w-6 h-6" />
+             </button>
+             <span className="font-bold text-white">
+                {navItems.find(i => i.id === view)?.label}
+             </span>
+          </div>
+          <img src="https://cdn-icons-png.flaticon.com/512/12222/12222560.png" alt="Logo" className="w-8 h-8" />
         </header>
-        
-        <div className="flex-1 p-6 lg:p-8 overflow-y-auto">
+
+        {/* Desktop Header Content (hidden on mobile mostly, except inside dashboard) */}
+        <div className="flex-1 overflow-hidden relative p-4 lg:p-6">
            {renderContent()}
         </div>
       </main>
 
-      {/* Live Assistant Modal Overlay */}
-      {view === ViewState.VOICE_ASSISTANT && (
-        <LiveAssistant onClose={() => setView(ViewState.DASHBOARD)} />
+      {/* Install Modal */}
+      {showInstallModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-sm w-full shadow-2xl relative">
+            <button 
+              onClick={() => setShowInstallModal(false)} 
+              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="text-center">
+               <div className="w-16 h-16 bg-indigo-600 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg shadow-indigo-600/30">
+                  <Download className="w-8 h-8 text-white" />
+               </div>
+               <h3 className="text-xl font-bold text-white mb-2">Install Mobile App</h3>
+               <p className="text-slate-400 text-sm mb-6">
+                 Install <strong>Geethesh's AI</strong> on your Android device (APK-like experience):
+               </p>
+               <ol className="text-left text-sm text-slate-300 space-y-3 bg-slate-800/50 p-4 rounded-xl mb-6">
+                 <li className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold">1</span>
+                    Tap the browser menu (3 dots)
+                 </li>
+                 <li className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold">2</span>
+                    Select "Install App" or "Add to Home Screen"
+                 </li>
+               </ol>
+               <button 
+                 onClick={() => setShowInstallModal(false)}
+                 className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-colors"
+               >
+                 Got it
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+          <ShareModal onClose={() => setShowShareModal(false)} />
       )}
 
     </div>

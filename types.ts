@@ -1,3 +1,4 @@
+
 import { Type } from "@google/genai";
 
 export enum ViewState {
@@ -7,7 +8,7 @@ export enum ViewState {
   THUMBNAIL = 'THUMBNAIL',
   WRITER = 'WRITER',
   VOICE_ASSISTANT = 'VOICE_ASSISTANT',
-  MUSIC = 'MUSIC',
+  KNOWLEDGE = 'KNOWLEDGE',
 }
 
 export interface ChatMessage {

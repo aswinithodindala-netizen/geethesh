@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { generateMusic, findYoutubeVideo } from '../services/geminiService';
 import { decode, decodeAudioData } from '../services/audioUtils';
-import { Play, Square, Loader2, Music, Search, Radio, Disc, Mic2, ListMusic } from 'lucide-react';
+import { Play, Square, Loader2, Music, Search, Radio, Disc, Mic2, ListMusic, Trash2, Plus } from 'lucide-react';
 
-// Hardcoded Telugu Playlist
-const TELUGU_PLAYLIST = [
+// Initial Playlist Data
+const INITIAL_PLAYLIST = [
   { title: "Naatu Naatu - RRR", videoId: "OsU0CGZoV8E" },
   { title: "Samajavaragamana - Ala Vaikunthapurramuloo", videoId: "s_2sJ_4_3sY" },
   { title: "Inkem Inkem Inkem Kaavaale - Geetha Govindam", videoId: "V_Lp106sVgw" },
@@ -17,6 +17,11 @@ const TELUGU_PLAYLIST = [
   { title: "Srivalli - Pushpa", videoId: "hcMzwMrr1tE" },
 ];
 
+interface Song {
+  title: string;
+  videoId: string;
+}
+
 const MusicModule: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'GENERATOR' | 'PLAYER'>('PLAYER');
   
@@ -27,10 +32,11 @@ const MusicModule: React.FC = () => {
   const [genError, setGenError] = useState<string | null>(null);
   
   // Player State
+  const [playlist, setPlaylist] = useState<Song[]>(INITIAL_PLAYLIST);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
-  const [currentVideoId, setCurrentVideoId] = useState<string | null>(TELUGU_PLAYLIST[0].videoId);
-  const [currentTrackName, setCurrentTrackName] = useState<string>(TELUGU_PLAYLIST[0].title);
+  const [currentVideoId, setCurrentVideoId] = useState<string | null>(INITIAL_PLAYLIST[0].videoId);
+  const [currentTrackName, setCurrentTrackName] = useState<string>(INITIAL_PLAYLIST[0].title);
 
   // Audio Context (Generator)
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -41,12 +47,18 @@ const MusicModule: React.FC = () => {
   const animationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
-    audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    // FIX: Do not force sampleRate in constructor. Use default system rate to support all devices (especially Android).
+    audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     return () => {
       stopAudio();
       audioContextRef.current?.close();
     };
   }, []);
+
+  // Stop audio when tab changes
+  useEffect(() => {
+    stopAudio();
+  }, [activeTab]);
 
   // --- GENERATOR LOGIC ---
 
@@ -125,6 +137,8 @@ const MusicModule: React.FC = () => {
       const result = await generateMusic(prompt);
       const rawBytes = decode(result.data);
       if (audioContextRef.current) {
+          // Decode data into a buffer. The buffer will effectively be 24kHz (as passed here),
+          // but the context can be running at 48kHz. The node handles resampling automatically.
           const buffer = await decodeAudioData(rawBytes, audioContextRef.current, 24000, 1);
           audioBufferRef.current = buffer;
           playGenAudio();
@@ -143,18 +157,35 @@ const MusicModule: React.FC = () => {
     if(!searchQuery.trim()) return;
     setIsSearching(true);
     try {
-      const videoId = await findYoutubeVideo(searchQuery);
-      if(videoId) {
-        setCurrentVideoId(videoId);
-        setCurrentTrackName(searchQuery);
+      const result = await findYoutubeVideo(searchQuery);
+      if(result && result.videoId) {
+        // Set current song
+        setCurrentVideoId(result.videoId);
+        setCurrentTrackName(result.title);
+        
+        // Add to playlist if it's not already there
+        setPlaylist(prev => {
+            const exists = prev.some(s => s.videoId === result.videoId);
+            if (!exists) {
+                return [{ title: result.title, videoId: result.videoId }, ...prev];
+            }
+            return prev;
+        });
+        setSearchQuery(''); // Clear search box for cleaner UX
       } else {
-        alert("Could not find a video for this song.");
+        alert("Could not find a video for this song. Please try a different query.");
       }
     } catch(e) {
       console.error(e);
+      alert("Search failed. Please try again.");
     } finally {
       setIsSearching(false);
     }
+  };
+
+  const removeFromPlaylist = (e: React.MouseEvent, videoIdToRem: string) => {
+    e.stopPropagation(); // Prevent playing the song when clicking delete
+    setPlaylist(prev => prev.filter(s => s.videoId !== videoIdToRem));
   };
 
   return (
@@ -196,27 +227,28 @@ const MusicModule: React.FC = () => {
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSearchSong()}
-                            placeholder="Search any song online..." 
-                            className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-pink-500"
+                            placeholder="Search any song to add & play..." 
+                            className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-pink-500 transition-all"
                           />
                           <Search className="w-5 h-5 text-slate-500 absolute left-3 top-3.5" />
                        </div>
                        <button 
                          onClick={handleSearchSong}
                          disabled={isSearching}
-                         className="px-6 bg-pink-600 hover:bg-pink-700 text-white rounded-xl font-medium disabled:opacity-50"
+                         className="px-6 bg-pink-600 hover:bg-pink-700 text-white rounded-xl font-medium disabled:opacity-50 transition-colors flex items-center gap-2"
                        >
-                         {isSearching ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Search'}
+                         {isSearching ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Plus className="w-5 h-5"/> Play</>}
                        </button>
                     </div>
 
                     {/* Video Player */}
-                    <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative">
+                    <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative ring-1 ring-white/10">
                         {currentVideoId ? (
                            <iframe 
+                             key={currentVideoId}
                              width="100%" 
                              height="100%" 
-                             src={`https://www.youtube.com/embed/${currentVideoId}?autoplay=1`} 
+                             src={`https://www.youtube.com/embed/${currentVideoId}?autoplay=1&enablejsapi=1&origin=${window.location.origin}`} 
                              title="YouTube video player" 
                              frameBorder="0" 
                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
@@ -231,41 +263,59 @@ const MusicModule: React.FC = () => {
                     </div>
                     
                     {currentTrackName && (
-                        <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
-                           <h3 className="text-white font-semibold flex items-center gap-2">
-                             <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                             Now Playing: <span className="text-pink-400">{currentTrackName}</span>
-                           </h3>
+                        <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700 flex items-center justify-between">
+                           <div>
+                               <h3 className="text-white font-semibold flex items-center gap-2">
+                                 <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                                 Now Playing
+                               </h3>
+                               <p className="text-pink-400 mt-1 font-medium text-lg">{currentTrackName}</p>
+                           </div>
+                           <Disc className="w-10 h-10 text-slate-700 animate-spin-slow" />
                         </div>
                     )}
                 </div>
 
                 {/* Playlist Sidebar */}
-                <div className="w-full lg:w-80 bg-slate-800/30 border-l border-slate-700 p-4 overflow-y-auto">
-                    <h3 className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
-                       <ListMusic className="w-4 h-4" /> Telugu Top Hits
-                    </h3>
-                    <div className="space-y-2">
-                       {TELUGU_PLAYLIST.map((song, idx) => (
-                          <button 
-                            key={idx}
+                <div className="w-full lg:w-96 bg-slate-800/30 border-l border-slate-700 flex flex-col h-[400px] lg:h-full">
+                    <div className="p-4 border-b border-slate-700 bg-slate-800/50">
+                        <h3 className="text-slate-200 text-sm font-bold uppercase tracking-wider flex items-center gap-2">
+                           <ListMusic className="w-4 h-4 text-pink-500" /> Current Playlist
+                        </h3>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                       {playlist.length === 0 && (
+                           <div className="text-center p-8 text-slate-500 text-sm">
+                               Playlist is empty. Search to add songs!
+                           </div>
+                       )}
+                       {playlist.map((song, idx) => (
+                          <div 
+                            key={`${song.videoId}-${idx}`}
+                            className={`group w-full text-left p-3 rounded-xl transition-all flex items-center gap-3 relative cursor-pointer ${currentVideoId === song.videoId ? 'bg-pink-600 text-white shadow-lg shadow-pink-600/20' : 'hover:bg-slate-700 text-slate-300'}`}
                             onClick={() => {
                                 setCurrentVideoId(song.videoId);
                                 setCurrentTrackName(song.title);
                             }}
-                            className={`w-full text-left p-3 rounded-xl transition-all flex items-center gap-3 group ${currentVideoId === song.videoId ? 'bg-pink-600 text-white shadow-lg shadow-pink-600/20' : 'hover:bg-slate-700 text-slate-300'}`}
                           >
-                             <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${currentVideoId === song.videoId ? 'bg-white/20' : 'bg-slate-800 text-slate-500'}`}>
+                             <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full shrink-0 ${currentVideoId === song.videoId ? 'bg-white/20' : 'bg-slate-800 text-slate-500'}`}>
                                 {idx + 1}
                              </span>
-                             <div className="flex-1 truncate">
-                                <div className="font-medium truncate">{song.title.split(' - ')[0]}</div>
-                                <div className={`text-xs truncate ${currentVideoId === song.videoId ? 'text-pink-100' : 'text-slate-500 group-hover:text-slate-400'}`}>
-                                   {song.title.split(' - ')[1]}
-                                </div>
+                             <div className="flex-1 min-w-0 pr-6">
+                                <div className="font-medium truncate text-sm">{song.title}</div>
                              </div>
-                             {currentVideoId === song.videoId && <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>}
-                          </button>
+                             
+                             {currentVideoId === song.videoId && <div className="w-2 h-2 bg-white rounded-full animate-pulse shrink-0"></div>}
+                             
+                             <button 
+                                onClick={(e) => removeFromPlaylist(e, song.videoId)}
+                                className={`absolute right-2 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity ${currentVideoId === song.videoId ? 'text-pink-200 hover:bg-pink-700' : 'text-slate-400 hover:bg-slate-600 hover:text-red-400'}`}
+                                title="Remove from playlist"
+                             >
+                                <Trash2 className="w-4 h-4" />
+                             </button>
+                          </div>
                        ))}
                     </div>
                 </div>

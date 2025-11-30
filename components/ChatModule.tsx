@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Upload, X, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { generateTextResponse } from '../services/geminiService';
@@ -5,7 +6,7 @@ import { ChatMessage } from '../types';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 
 interface ChatModuleProps {
-  mode: 'EDUCATION' | 'FINANCE' | 'WRITER';
+  mode: 'EDUCATION' | 'FINANCE' | 'WRITER' | 'KNOWLEDGE';
   title: string;
   systemInstruction: string;
 }
@@ -35,7 +36,7 @@ const ChatModule: React.FC<ChatModuleProps> = ({ mode, title, systemInstruction 
       }]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mode]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -59,14 +60,14 @@ const ChatModule: React.FC<ChatModuleProps> = ({ mode, title, systemInstruction 
     const userMsg: ChatMessage = {
       role: 'user',
       text: input,
-      image: selectedFile?.data, // Only strictly valid for images, but storing base64 here for local preview if needed
+      image: selectedFile?.data,
       timestamp: Date.now()
     };
 
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     const currentFile = selectedFile;
-    setSelectedFile(null); // Clear after sending
+    setSelectedFile(null);
     setIsLoading(true);
 
     try {
@@ -84,14 +85,12 @@ const ChatModule: React.FC<ChatModuleProps> = ({ mode, title, systemInstruction 
 
       if (isFinance) {
         try {
-            // Attempt to parse JSON if finance mode
             const parsed = JSON.parse(responseText);
             if (parsed.data && Array.isArray(parsed.data)) {
                 chartData = parsed.data;
                 finalText = parsed.summary || parsed.title || "Here is the financial analysis.";
             }
         } catch (e) {
-            // Fallback if not pure JSON
             finalText = responseText;
         }
       }
@@ -117,17 +116,16 @@ const ChatModule: React.FC<ChatModuleProps> = ({ mode, title, systemInstruction 
 
   return (
     <div className="flex flex-col h-full bg-slate-900/50 rounded-2xl border border-slate-700 overflow-hidden">
-      {/* Header */}
       <div className="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
         <h2 className="text-lg font-semibold text-white flex items-center gap-2">
           {mode === 'EDUCATION' && <span className="text-blue-400">🎓</span>}
           {mode === 'FINANCE' && <span className="text-green-400">📈</span>}
           {mode === 'WRITER' && <span className="text-purple-400">✍️</span>}
+          {mode === 'KNOWLEDGE' && <span className="text-teal-400">🧠</span>}
           {title}
         </h2>
       </div>
 
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -176,7 +174,6 @@ const ChatModule: React.FC<ChatModuleProps> = ({ mode, title, systemInstruction 
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
       <div className="p-4 bg-slate-800 border-t border-slate-700">
         {selectedFile && (
             <div className="mb-2 flex items-center gap-2 p-2 bg-slate-700/50 rounded-lg w-fit">

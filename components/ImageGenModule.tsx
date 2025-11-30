@@ -1,8 +1,13 @@
+
 import React, { useState } from 'react';
 import { generateImage } from '../services/geminiService';
-import { Image as ImageIcon, Download, Loader2, Sparkles, RefreshCw, AlertCircle } from 'lucide-react';
+import { Image as ImageIcon, Download, Loader2, Sparkles, AlertCircle } from 'lucide-react';
 
-const ImageGenModule: React.FC = () => {
+interface ImageGenModuleProps {
+  // No props needed now
+}
+
+const ImageGenModule: React.FC<ImageGenModuleProps> = () => {
   const [prompt, setPrompt] = useState('');
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -11,6 +16,7 @@ const ImageGenModule: React.FC = () => {
 
   const handleGenerate = async () => {
     if (!prompt) return;
+
     setIsLoading(true);
     setGeneratedImage(null);
     setError(null);

@@ -11,7 +11,10 @@ export const generateTextResponse = async (
   isFinancial: boolean = false
 ) => {
   try {
-    const model = isFinancial ? 'gemini-2.5-flash' : 'gemini-3-pro-preview';
+    // Use gemini-2.5-flash-lite for low latency responses as requested
+    // Financial mode retains standard flash for specific structured data capabilities, 
+    // while other modes use the lightweight model for speed.
+    const model = isFinancial ? 'gemini-2.5-flash' : 'gemini-2.5-flash-lite';
     
     const parts: any[] = [];
     if (imagePart) {
@@ -42,16 +45,19 @@ export const generateTextResponse = async (
 
     return response.text;
   } catch (error) {
-    console.error("Gemini Text Generation Error:", error);
+    console.error("AI Text Generation Error:", error);
     throw error;
   }
 };
 
 export const generateImage = async (prompt: string, aspectRatio: string = "1:1") => {
   try {
+    // Prepend explicit instruction to ensure the model generates an image and doesn't just chat
+    const fullPrompt = `Generate a high-quality image of: ${prompt}`;
+    
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
-      contents: { parts: [{ text: prompt }] },
+      contents: { parts: [{ text: fullPrompt }] },
       config: {
         imageConfig: {
           aspectRatio: aspectRatio as any, 
@@ -60,20 +66,33 @@ export const generateImage = async (prompt: string, aspectRatio: string = "1:1")
       }
     });
     
-    // Extract image
     const parts = response.candidates?.[0]?.content?.parts || [];
+    let imageData = null;
+    let textMessage = "";
+
+    // Iterate through all parts to find the image. 
+    // The model might return text ("Here is your image") AND the image.
     for (const part of parts) {
       if (part.inlineData) {
-        return `data:image/png;base64,${part.inlineData.data}`;
+        imageData = `data:image/png;base64,${part.inlineData.data}`;
       }
-      // If the model refuses and returns text instead (e.g., safety), throw that as an error
       if (part.text) {
-        throw new Error(part.text);
+        textMessage += part.text;
       }
     }
+
+    if (imageData) {
+      return imageData;
+    }
+
+    // If no image found, then the text message is likely a refusal or error explanation
+    if (textMessage) {
+      throw new Error(textMessage);
+    }
+
     throw new Error("No image data found in response. The model may have refused the request.");
   } catch (error) {
-    console.error("Gemini Image Generation Error:", error);
+    console.error("AI Image Generation Error:", error);
     throw error;
   }
 };
@@ -103,53 +122,63 @@ export const generateMusic = async (prompt: string) => {
     }
     throw new Error("No audio generated.");
   } catch (error) {
-    console.error("Gemini Music Generation Error:", error);
+    console.error("AI Music Generation Error:", error);
     throw error;
   }
 };
 
-export const findYoutubeVideo = async (query: string): Promise<string | null> => {
+export const findYoutubeVideo = async (query: string): Promise<{videoId: string, title: string} | null> => {
   try {
+    // Cannot use responseMimeType: "application/json" with tools like googleSearch.
+    // Instead, we ask for a strict text format and parse it.
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: { parts: [{ text: `Find the official YouTube video URL for the song "${query}". Return only the YouTube URL in your response. Do not include any other text.` }] },
+      contents: { 
+        parts: [{ 
+          text: `Find the official YouTube video for the song "${query}". 
+          Provide the 11-character Video ID and the official Title.
+          
+          You MUST output the result in this exact format:
+          VIDEO_ID: <THE_11_CHAR_ID>
+          TITLE: <THE_VIDEO_TITLE>
+          
+          Do not add any other text or JSON.` 
+        }] 
+      },
       config: {
         tools: [{ googleSearch: {} }],
+        // responseMimeType removed to avoid 400 error
       }
     });
 
     const text = response.text || "";
     
-    // Regex to extract video ID from various YouTube URL formats
-    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-    
-    // Check main text
-    let match = text.match(regExp);
-    if (match && match[7].length === 11) {
-        return match[7];
-    }
-    
-    // Check for URL in text if not at start
-    const urlMatch = text.match(/https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/[^\s<>"']+/);
-    if (urlMatch) {
-         match = urlMatch[0].match(regExp);
-         if (match && match[7].length === 11) return match[7];
-    }
+    // Parse the custom format
+    const idMatch = text.match(/VIDEO_ID:\s*([a-zA-Z0-9_-]{11})/);
+    const titleMatch = text.match(/TITLE:\s*(.+)/);
 
-    // Check grounding metadata chunks for source URIs
-    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    if (chunks) {
-      for (const chunk of chunks) {
-        if (chunk.web?.uri) {
-           match = chunk.web.uri.match(regExp);
-           if (match && match[7].length === 11) return match[7];
-        }
-      }
+    if (idMatch) {
+         return { 
+             videoId: idMatch[1], 
+             title: titleMatch ? titleMatch[1].trim() : query 
+         };
+    }
+    
+    // Fallback: Check for URL in the text if the model returned a link instead of strict format
+    const urlRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+    const urlMatch = text.match(urlRegex);
+    
+    if (urlMatch) {
+         return { 
+             videoId: urlMatch[1], 
+             title: titleMatch ? titleMatch[1].trim() : query 
+         };
     }
 
     return null;
+
   } catch (error) {
-    console.error("YouTube Search Error:", error);
+    console.error("Search Error:", error);
     return null;
   }
 };

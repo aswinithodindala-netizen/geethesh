@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { LiveServerMessage, Modality } from '@google/genai';
 import { getLiveClient } from '../services/geminiService';
@@ -25,9 +26,9 @@ const LiveAssistant: React.FC<LiveAssistantProps> = ({ onClose }) => {
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const frameIntervalRef = useRef<number | null>(null);
 
-  // Initialize Audio Output
   useEffect(() => {
-    audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    // FIX: Removed fixed sampleRate to support mobile devices
+    audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     return () => {
       audioContextRef.current?.close();
     };
@@ -41,13 +42,11 @@ const LiveAssistant: React.FC<LiveAssistantProps> = ({ onClose }) => {
       });
       streamRef.current = stream;
       
-      // Setup Video Preview
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play();
       }
 
-      // Input Audio Setup
       inputContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       const source = inputContextRef.current.createMediaStreamSource(stream);
       const analyser = inputContextRef.current.createAnalyser();
@@ -57,7 +56,6 @@ const LiveAssistant: React.FC<LiveAssistantProps> = ({ onClose }) => {
       analyser.connect(scriptProcessor);
       scriptProcessor.connect(inputContextRef.current.destination);
 
-      // Simple volume visualizer
       const pcmData = new Float32Array(analyser.fftSize);
       const updateVolume = () => {
         analyser.getFloatTimeDomainData(pcmData);
@@ -77,7 +75,6 @@ const LiveAssistant: React.FC<LiveAssistantProps> = ({ onClose }) => {
             setIsActive(true);
             updateVolume();
 
-            // Audio Input Processing
             scriptProcessor.onaudioprocess = (e) => {
               if (isMuted) return;
               const inputData = e.inputBuffer.getChannelData(0);
@@ -85,7 +82,6 @@ const LiveAssistant: React.FC<LiveAssistantProps> = ({ onClose }) => {
               sessionRef.current?.then(session => session.sendRealtimeInput({ media: pcmBlob }));
             };
             
-            // Video Frame Processing
             if (canvasRef.current && videoRef.current) {
                const ctx = canvasRef.current.getContext('2d');
                frameIntervalRef.current = window.setInterval(() => {
@@ -101,7 +97,7 @@ const LiveAssistant: React.FC<LiveAssistantProps> = ({ onClose }) => {
                      media: { data: base64Data, mimeType: 'image/jpeg' }
                    });
                  });
-               }, 1000); // 1 FPS for efficiency in this demo
+               }, 1000); 
             }
           },
           onmessage: async (msg: LiveServerMessage) => {
@@ -165,14 +161,13 @@ const LiveAssistant: React.FC<LiveAssistantProps> = ({ onClose }) => {
     if (frameIntervalRef.current) {
         clearInterval(frameIntervalRef.current);
     }
-    sessionRef.current = null; // No direct close method exposed in type, relies on connection drop or page unload usually, but we stop sending.
+    sessionRef.current = null;
     setIsActive(false);
     onClose();
   };
 
   useEffect(() => {
     startSession();
-    // Cleanup on unmount
     return () => {
       stopSession();
     };
@@ -183,7 +178,6 @@ const LiveAssistant: React.FC<LiveAssistantProps> = ({ onClose }) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md">
       <div className="relative w-full max-w-2xl bg-gray-900 rounded-2xl border border-gray-700 shadow-2xl overflow-hidden p-6 flex flex-col items-center">
         
-        {/* Header */}
         <div className="w-full flex justify-between items-center mb-6">
             <h2 className="text-xl font-semibold text-white flex items-center gap-2">
                 <Activity className={`w-5 h-5 ${isActive ? 'text-green-400 animate-pulse' : 'text-gray-500'}`} />
@@ -194,7 +188,6 @@ const LiveAssistant: React.FC<LiveAssistantProps> = ({ onClose }) => {
             </button>
         </div>
 
-        {/* Visualizer / Video */}
         <div className="relative w-full aspect-video bg-gray-800 rounded-xl overflow-hidden mb-6 flex items-center justify-center">
             <video 
                 ref={videoRef} 
@@ -218,7 +211,6 @@ const LiveAssistant: React.FC<LiveAssistantProps> = ({ onClose }) => {
             <canvas ref={canvasRef} className="hidden" />
         </div>
 
-        {/* Controls */}
         <div className="flex items-center gap-6">
             <button 
                 onClick={() => setIsMuted(!isMuted)}
